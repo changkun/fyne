@@ -31,6 +31,7 @@ var drawFuncQueue = make(chan drawData)
 var runFlag = false
 var runMutex = &sync.Mutex{}
 var initOnce = &sync.Once{}
+var donePool = &sync.Pool{New: func() interface{} { return make(chan bool) }}
 
 // Arrange that main.main runs on main thread.
 func init() {
@@ -50,8 +51,8 @@ func runOnMain(f func()) {
 	if !running() {
 		f()
 	} else {
-		done := make(chan bool)
-
+		done := donePool.Get().(chan bool)
+		defer donePool.Put(done)
 		funcQueue <- funcData{f: f, done: done}
 		<-done
 	}
@@ -59,7 +60,8 @@ func runOnMain(f func()) {
 
 // force a function f to run on the draw thread
 func runOnDraw(w *window, f func()) {
-	done := make(chan bool)
+	done := donePool.Get().(chan bool)
+	defer donePool.Put(done)
 
 	drawFuncQueue <- drawData{f: f, win: w, done: done}
 	<-done
